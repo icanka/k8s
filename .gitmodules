@@ -1,0 +1,3 @@
+[submodule "certified-kubernetes-administrator-course"]
+	path = certified-kubernetes-administrator-course
+	url = git@github.com:kodekloudhub/certified-kubernetes-administrator-course.git
