@@ -2,13 +2,21 @@
 # vi: set ft=ruby :
 
 NUM_MASTER_NODE = 1
-NUM_WORKER_NODE = 1
+NUM_WORKER_NODE = 2
 IP_NW = "10.10.10."
 MASTER_IP_START = 10
 NODE_IP_START = 20
 
 # master ip
 MASTER_IP = IP_NW + "#{MASTER_IP_START}"
+
+def node_setup(node)
+  node.vm.provision "shell", path: "archlinux/node_setup.sh"
+end
+
+def setup_ssh(node)
+  node.vm.provision "shell", path: "archlinux/ssh.sh"
+end
 
 def fix_network_filenames(node)
   node.vm.provision "shell", path: "archlinux/network_filenames.sh"
@@ -34,26 +42,14 @@ def setup_dns(node)
   end
 
   node.vm.provision "shell", inline: <<-SHELL
-    ADRESS=$(ip -4 addr show | grep -E "inet 10.10.10.[0-9]+" | awk '{print $2}' | cut -d/ -f1)
-    echo "INTERNAL_IP=${ADRESS}" > /etc/environment
-    sed -i -e 's/#DNS=/DNS=8.8.8.8/' /etc/systemd/resolved.conf
-    if systemctl restart systemd-resolved;then 
-      dns=$(systemd-resolve --status | grep "DNS Servers: 8.8.8.8")
-      if [[ -n $dns ]];then echo "DNS is set";else echo "DNS is not set" && exit 1;fi
-    else
-      echo "Failed to restart systemd-resolved"
-      exit 1
-    fi 
+
   SHELL
 end
 
 def provision_kubernetes_node(node)
   fix_network_filenames node
-  # install kubernetes
-  node.vm.provision "shell", inline: <<-SHELL
-    pacman -S --noconfirm tmux vim
-  SHELL
   setup_dns node
+  node_setup node
 end
 
 # All Vagrant configuration is done below. The "2" in Vagrant.configure
@@ -78,18 +74,20 @@ Vagrant.configure("2") do |config|
   (1..NUM_MASTER_NODE).each do |i|
     config.vm.define "kubemaster0#{i}" do |node|
       node.vm.provider "libvirt" do |libvirt|
-        libvirt.memory = 2048
+        libvirt.memory = 4096
         libvirt.cpus = 2
       end
       node.vm.hostname = "kubemaster0#{i}"
       node.vm.network :private_network, ip: IP_NW + "#{MASTER_IP_START + i}"
-      node.vm.network "forwarded_port", guest: 22, host: "#{2710}"
+      node.vm.network "forwarded_port", guest: 22, host: "#{2710 + i}"
       provision_kubernetes_node node
+      node.vm.provision "shell", inline: <<-SHELL
+        pacman -S --noconfirm tmux vim
+      SHELL
       node.vm.provision "file", source: "archlinux/conf/tmux.conf", destination: "$HOME/.tmux.conf"
       node.vm.provision "file", source: "archlinux/conf/vimrc", destination: "$HOME/.vimrc"
     end
   end
-
 
   (1..NUM_WORKER_NODE).each do |i|
     config.vm.define "kubenode0#{i}" do |node|
@@ -106,11 +104,7 @@ Vagrant.configure("2") do |config|
 
   # Create a forwarded port mapping which allows access to a specific port
   # within the machine from a port on the host machine. In the example below,
-  # accessing "localhost:8080" will access port 80 on the guest machine.
-  # NOTE: This will enable public access to the opened port
-  # config.vm.network "forwarded_port", guest: 80, host: 8080
-
-  # Create a forwarded port mapping which allows access to a specific port
+  # accessing "localhost:8080" will access port 80 on the guest machine.  # NOTE: This will enable public access to the opened port # config.vm.network "forwarded_port", guest: 80, host: 8080 # Create a forwarded port mapping which allows access to a specific port
   # within the machine from a port on the host machine and only allow access
   # via 127.0.0.1 to disable public access
   # config.vm.network "forwarded_port", guest: 80, host: 8080, host_ip: "127.0.0.1"
