@@ -2,7 +2,7 @@
 # vi: set ft=ruby :
 
 NUM_MASTER_NODE = 1
-NUM_WORKER_NODE = 2
+NUM_WORKER_NODE = 0
 IP_NW = "10.10.10."
 MASTER_IP_START = 10
 NODE_IP_START = 20
@@ -64,7 +64,7 @@ Vagrant.configure("2") do |config|
   # Every Vagrant development environment requires a box. You can search for
   # boxes at https://vagrantcloud.com/search.
   config.vm.box = "archlinux/archlinux"
-  config.vm.boot_timeout = 900
+  config.vm.boot_timeout = 9000
 
   # Disable automatic box update checking. If you disable this, then
   # boxes will only be checked for updates when the user runs
@@ -78,8 +78,8 @@ Vagrant.configure("2") do |config|
         libvirt.cpus = 2
       end
       node.vm.hostname = "kubemaster0#{i}"
-      node.vm.network :private_network, ip: IP_NW + "#{MASTER_IP_START + i}"
-      node.vm.network "forwarded_port", guest: 22, host: "#{2710 + i}"
+      # node.vm.network :private_network, ip: IP_NW + "#{MASTER_IP_START + i}"
+      # node.vm.network "forwarded_port", guest: 22, host: 22 #host: "#{2710 + i}"
       provision_kubernetes_node node
       node.vm.provision "shell", inline: <<-SHELL
         pacman -S --noconfirm tmux vim
