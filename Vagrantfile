@@ -3,59 +3,66 @@
 
 NUM_MASTER_NODE = 1
 NUM_WORKER_NODE = 0
-IP_NW = "10.10.10."
 MASTER_IP_START = 10
 NODE_IP_START = 20
 
-# master ip
-MASTER_IP = IP_NW + "#{MASTER_IP_START}"
+IP_NW = "192.168.1."
+POD_CIDR = "10.1.10.0/24"
+SERVICE_CIDR="10.96.0.0/16"
 
-def node_setup(node)
-  node.vm.provision "shell", path: "archlinux/node_setup.sh"
+# master ip
+#MASTER_IP = IP_NW + "#{MASTER_IP_START}"
+
+def setup_network_filenames(node)
+  node.vm.provision "shell", path: "archlinux/network_filenames.sh"
+end
+
+def setup_gateway(node)
+  node.vm.provision "shell", path: "archlinux/setup_gateway.sh" do |s|
+    s.args = [IP_NW]
+  end
+end
+
+def setup_dns(node)
+  node.vm.provision "shell", path: "archlinux/setup_dns.sh"
+end
+
+def setup_hosts(node)
+  node.vm.provision "shell", path: "archlinux/setup_hosts.sh" do |s|
+    s.args = [IP_NW, MASTER_IP_START, NODE_IP_START, NUM_MASTER_NODE, NUM_WORKER_NODE]
+  end
 end
 
 def setup_ssh(node)
   node.vm.provision "shell", path: "archlinux/ssh.sh"
 end
 
-def fix_network_filenames(node)
-  node.vm.provision "shell", path: "archlinux/network_filenames.sh"
-end
-
-def setup_dns(node)
-  # add nodes to /etc/hosts, loop how many worker nodes we have and add them to /etc/hosts
-  (1..NUM_MASTER_NODE).each do |i|
-    node_ip = IP_NW + "#{MASTER_IP_START + i}"
-    node_name = "kubemaster0#{i}"
-    node.vm.provision "shell", path: "archlinux/setup_hosts.sh" do |s|
-      # pass node ip and node name as arguments to the shell script
-      s.args = [node_ip, node_name]
-    end
-  end
-
-  (1..NUM_WORKER_NODE).each do |i|
-    node_ip = IP_NW + "#{NODE_IP_START + i}"
-    node_name = "kubenode0#{i}"
-    node.vm.provision "shell", path: "archlinux/setup_hosts.sh" do |s|
-      s.args = [node_ip, node_name]
-    end
-  end
-
-  node.vm.provision "shell", inline: <<-SHELL
-
-  SHELL
+def setup_node(node)
+  node.vm.provision "shell", path: "archlinux/node_setup.sh"
 end
 
 def provision_kubernetes_node(node)
-  fix_network_filenames node
+  setup_network_filenames node
+  setup_gateway node
   setup_dns node
-  node_setup node
+  setup_hosts node
+  setup_ssh node
+  setup_node node
 end
+
+
+def control_plane_setup(node)
+  node.vm.provision "shell", path: "archlinux/control_plane.sh" do |s|
+    s.args = [POD_CIDR, SERVICE_CIDR]
+  end
+end
+
 
 # All Vagrant configuration is done below. The "2" in Vagrant.configure
 # configures the configuration version (we support older styles for
 # backwards compatibility). Please don't change it unless you know what
 # you're doing.
+
 Vagrant.configure("2") do |config|
   # The most common configuration options are documented and commented below.
   # For a complete reference, please see the online documentation at
@@ -78,9 +85,10 @@ Vagrant.configure("2") do |config|
         libvirt.cpus = 2
       end
       node.vm.hostname = "kubemaster0#{i}"
-      # node.vm.network :private_network, ip: IP_NW + "#{MASTER_IP_START + i}"
-      # node.vm.network "forwarded_port", guest: 22, host: 22 #host: "#{2710 + i}"
+      node.vm.network :public_network, ip: IP_NW + "#{MASTER_IP_START + i}", :dev => "enp35s0", :mode => "bridge"
+      #node.vm.network "forwarded_port", guest: 22, host: "#{2710 + i}"
       provision_kubernetes_node node
+      control_plane_setup node
       node.vm.provision "shell", inline: <<-SHELL
         pacman -S --noconfirm tmux vim
       SHELL

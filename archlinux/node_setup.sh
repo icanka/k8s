@@ -55,3 +55,7 @@ else
     exit 1
 fi
 
+
+cat <<EOF | sudo tee /etc/default/kubelet
+KUBELET_EXTRA_ARGS='--node-ip ${PRIMARY_IP}'
+EOF
